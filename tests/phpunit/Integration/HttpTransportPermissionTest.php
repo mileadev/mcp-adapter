@@ -106,6 +106,61 @@ final class HttpTransportPermissionTest extends TestCase {
 		$this->assertNull( $response->get_data() );
 	}
 
+
+	/** Cross-site browser requests are denied before a custom callback executes. */
+	public function test_cross_origin_is_rejected_before_custom_permission_callback(): void {
+		$called    = false;
+		$transport = $this->make_transport(
+			static function () use ( &$called ): bool {
+				$called = true;
+				return true;
+			}
+		);
+		$request   = new WP_REST_Request( 'POST', '/mcp' );
+		$request->set_header( 'Origin', 'https://malicious.invalid' );
+
+		$result = $transport->check_permission( $request );
+		$this->assertInstanceOf( WP_Error::class, $result );
+		$this->assertSame( 'mcp_adapter_origin_forbidden', $result->get_error_code() );
+		$this->assertSame( 403, $result->get_error_data()['status'] );
+		$this->assertFalse( $called );
+	}
+
+	/** Same-origin requests and clients without Origin remain permitted. */
+	public function test_same_origin_and_absent_origin_are_allowed(): void {
+		$transport = $this->make_transport( '__return_true' );
+		$request   = new WP_REST_Request( 'POST', '/mcp' );
+		$this->assertTrue( $transport->check_permission( $request ) );
+
+		$site_url = wp_parse_url( rest_url() );
+		$origin   = $site_url['scheme'] . '://' . $site_url['host'];
+		if ( isset( $site_url['port'] ) ) {
+			$origin .= ':' . $site_url['port'];
+		}
+		$request->set_header( 'Origin', $origin );
+		$this->assertTrue( $transport->check_permission( $request ) );
+	}
+
+	/** Proxies may explicitly allow their public origin; malformed Origins fail closed. */
+	public function test_origin_allowlist_and_malformed_origins(): void {
+		$transport = $this->make_transport( '__return_true' );
+		$request   = new WP_REST_Request( 'POST', '/mcp' );
+		$filter    = static fn(): array => array( 'https://approved.example:443' );
+		add_filter( 'mcp_adapter_allowed_http_origins', $filter );
+
+		try {
+			$request->set_header( 'Origin', 'https://approved.example' );
+			$this->assertTrue( $transport->check_permission( $request ) );
+
+			foreach ( array( 'null', 'https://approved.example/path', 'https://evil.invalid', 'https://approved.example?x=1', 'https://user@approved.example' ) as $origin ) {
+				$request->set_header( 'Origin', $origin );
+				$this->assertInstanceOf( WP_Error::class, $transport->check_permission( $request ), $origin );
+			}
+		} finally {
+			remove_filter( 'mcp_adapter_allowed_http_origins', $filter );
+		}
+	}
+
 	/**
 	 * Build a transport with an optional custom permission callback.
 	 *

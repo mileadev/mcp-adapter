@@ -75,10 +75,15 @@ class HttpTransport implements McpRestTransportInterface {
 	 *
 	 * @param \WP_REST_Request<array<string, mixed>> $request The request object.
 	 *
-	 * @return bool True if the user has permission, false otherwise.
+	 * @return bool|\WP_Error True when permitted, false when denied, or a 403 error for a disallowed Origin.
 	 */
 	public function check_permission( \WP_REST_Request $request ) {
 		$context = new HttpRequestContext( $request );
+
+		// Enforce the MCP Origin boundary before invoking any custom permission callback.
+		if ( ! $this->is_allowed_origin( $request ) ) {
+			return new \WP_Error( 'mcp_adapter_origin_forbidden', 'MCP requests from this Origin are not allowed.', array( 'status' => 403 ) );
+		}
 
 		// Check permission using callback or default
 		$transport_context = $this->request_handler->get_transport_context();
@@ -137,6 +142,86 @@ class HttpTransport implements McpRestTransportInterface {
 		}
 
 		return $user_has_capability;
+	}
+
+
+	/**
+	 * Reject cross-origin HTTP MCP requests before authorization callbacks run.
+	 *
+	 * Absent Origin headers remain valid for non-browser MCP clients. Sites
+	 * behind a reverse proxy can add their public origins with the filter.
+	 *
+	 * @param \WP_REST_Request $request The HTTP request.
+	 * @return bool Whether the request Origin matches an allowed site origin.
+	 */
+	private function is_allowed_origin( \WP_REST_Request $request ): bool {
+		$origin = $request->get_header( 'Origin' );
+		if ( null === $origin ) {
+			return true;
+		}
+
+		$normalized = is_string( $origin ) ? $this->normalize_origin( $origin, true ) : null;
+		if ( null === $normalized ) {
+			return false;
+		}
+
+		/**
+		 * Filters the HTTP origins permitted to call the MCP endpoint.
+		 *
+		 * An origin must be an absolute HTTP(S) URL, not a wildcard.
+		 * Only explicit origins are allowed; the site's REST URL is the default.
+		 *
+		 * @since 0.7.2
+		 *
+		 * @param string[]         $allowed_origins Permitted site origins.
+		 * @param \WP_REST_Request $request         Incoming request.
+		 */
+		$allowed_origins = apply_filters( 'mcp_adapter_allowed_http_origins', array( rest_url() ), $request );
+		if ( ! is_array( $allowed_origins ) ) {
+			return false;
+		}
+
+		foreach ( $allowed_origins as $allowed_origin ) {
+			if ( is_string( $allowed_origin ) && $normalized === $this->normalize_origin( $allowed_origin, false ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Compare scheme, hostname and effective port, not URL paths.
+	 *
+	 * Incoming Origin headers must not contain a path, userinfo or query.
+	 * An allowed URL may contain a path (for example, rest_url()).
+	 *
+	 * @param string $url    HTTP(S) URL.
+	 * @param bool   $strict Whether to enforce browser Origin syntax.
+	 * @return string|null Canonical origin for comparison.
+	 */
+	private function normalize_origin( string $url, bool $strict ): ?string {
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || ! isset( $parts['scheme'], $parts['host'] ) ) {
+			return null;
+		}
+
+		$scheme = strtolower( $parts['scheme'] );
+		if (
+			! in_array( $scheme, array( 'http', 'https' ), true )
+			|| '' === $parts['host']
+			|| isset( $parts['user'] )
+			|| isset( $parts['pass'] )
+			|| isset( $parts['query'] )
+			|| isset( $parts['fragment'] )
+			|| ( $strict && ! empty( $parts['path'] ) && '/' !== $parts['path'] )
+		) {
+			return null;
+		}
+
+		$port = isset( $parts['port'] ) ? (int) $parts['port'] : ( 'https' === $scheme ? 443 : 80 );
+
+		return sprintf( '%s://%s:%d', $scheme, strtolower( $parts['host'] ), $port );
 	}
 
 	/**
