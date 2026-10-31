@@ -146,7 +146,7 @@ final class ExecuteAbilityAbility {
 		} catch ( \Throwable $e ) {
 			return array(
 				'success' => false,
-				'error'   => $e->getMessage(),
+				'error'   => 'Ability execution failed',
 			);
 		}
 	}

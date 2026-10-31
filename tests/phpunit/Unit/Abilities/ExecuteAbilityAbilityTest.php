@@ -386,7 +386,8 @@ final class ExecuteAbilityAbilityTest extends TestCase {
 		$this->assertArrayHasKey( 'success', $result );
 		$this->assertArrayHasKey( 'error', $result );
 		$this->assertFalse( $result['success'] );
-		$this->assertStringContainsString( 'Test execution exception', $result['error'] );
+		$this->assertSame( 'Ability execution failed', $result['error'] );
+		$this->assertStringNotContainsString( 'Test execution exception', $result['error'] );
 
 		// Clean up
 		wp_unregister_ability( 'test/exception-execution' );
