@@ -1,51 +1,61 @@
-# MCP Adapter
+# MCP Adapter for WordPress
 
-Part of the [**AI Building Blocks for WordPress** initiative](https://make.wordpress.org/ai/2025/07/17/ai-building-blocks)
+[![Upstream](https://img.shields.io/badge/upstream-WordPress%2Fmcp--adapter-3858e9)](https://github.com/WordPress/mcp-adapter) · [MCP specification](https://modelcontextprotocol.io/specification/) · GPL-2.0-or-later
 
-The official WordPress package for MCP integration that exposes WordPress abilities as [Model Context Protocol (MCP)](https://modelcontextprotocol.io) tools, resources, and prompts for AI agents.
+Expose opted-in WordPress Abilities API operations as MCP tools, resources and prompts. This fork preserves the upstream PHP plugin and adds hardened local deployment guidance for model-powered MCP clients.
 
-[![WordPress Playground Demo](https://img.shields.io/wordpress/plugin/v/mcp-adapter?logo=wordpress&logoColor=FFFFFF&label=Live%20Demo&labelColor=3858E9&color=3858E9)](https://playground.wordpress.net/?blueprint-url=https://raw.githubusercontent.com/WordPress/mcp-adapter/trunk/.wordpress-org/blueprints/blueprint.json)
+**Scope:** This repository is an **MCP server**, not a model inference gateway. Ollama (local or Cloud) and Amazon Bedrock are configured in the **host/agent** that consumes its tools. No model provider API keys belong in WordPress.
 
-[![Test](https://github.com/WordPress/mcp-adapter/actions/workflows/test.yml/badge.svg)](https://github.com/WordPress/mcp-adapter/actions/workflows/test.yml) [![Plugin Check](https://github.com/WordPress/mcp-adapter/actions/workflows/plugin-check.yml/badge.svg)](https://github.com/WordPress/mcp-adapter/actions/workflows/plugin-check.yml) [![Dependency Review](https://github.com/WordPress/mcp-adapter/actions/workflows/dependency-review.yml/badge.svg)](https://github.com/WordPress/mcp-adapter/actions/workflows/dependency-review.yml)
+## Requirements
 
-## Overview
+- WordPress 6.9+, PHP 7.4+ (see CI for tested combinations)
+- Composer dependencies installed (the source checkout does not contain `vendor/`)
+- For development: Docker and the Node.js version in `.nvmrc`
 
-MCP Adapter bridges WordPress's [Abilities API](https://developer.wordpress.org/news/2025/11/introducing-the-wordpress-abilities-api/) with the [MCP specification](https://modelcontextprotocol.io/specification/), giving AI agents a standardized way to interact with WordPress functionality. It includes HTTP and STDIO transport support, comprehensive error handling, and an extensible architecture for custom integrations.
+## Local quick start
 
-## Features
+```bash
+git clone https://github.com/mileadev/mcp-adapter.git
+cd mcp-adapter
+nvm use
+npm ci
+composer install
+npm run wp-env start
+npm run wp-env:cli -- plugin activate mcp-adapter
+npm run wp-env:cli -- mcp-adapter list
+```
 
-- **Ability-to-MCP conversion** — WordPress abilities automatically become MCP [tools](https://modelcontextprotocol.io/specification/2026-07-28/server/tools), [resources](https://modelcontextprotocol.io/specification/2026-07-28/server/resources), and [prompts](https://modelcontextprotocol.io/specification/2026-07-28/server/prompts)
-- **Multi-server management** — run multiple MCP servers, each with its own transports, abilities, and handlers
-- **HTTP and STDIO transports**, plus a `McpTransportInterface` for custom protocols — see [Custom Transports](docs/guides/custom-transports.md)
-- **Pluggable error handling and observability** — swap in your own logging or monitoring via `McpErrorHandlerInterface` and `McpObservabilityHandlerInterface` — see [Error Handling](docs/guides/error-handling.md) and [Observability](docs/guides/observability.md)
-- **Granular permissions** — per-server transport authentication and per-ability permission checks — see [Transport Permissions](docs/guides/transport-permissions.md)
+Local WordPress: `http://localhost:8888`. Development credentials are provided by `wp-env`; do **not** reuse them outside development. If the server does not appear, see [installation](docs/getting-started/installation.md) and [troubleshooting](docs/troubleshooting/common-issues.md).
 
-## Architecture
+**STDIO:** run `wp --path=/absolute/path/to/wordpress mcp-adapter serve --server=mcp-adapter-default-server --user=<least-privileged-user>`. Configure this command in an MCP host. The client running the process must be trusted: `--user` selects the WordPress execution identity, it does not authenticate the subprocess.
 
-See the [Architecture Overview](docs/architecture/overview.md) for the full component breakdown.
+**HTTP:** `/wp-json/mcp/mcp-adapter-default-server`. Use an authenticated WordPress REST client or a supported local proxy. HTTP GET/SSE streaming is **not** implemented; compatibility is limited to supported request/response flows.
 
-## Getting Started
+## Integration
 
-Follow the [Quick Start Guide](docs/getting-started/README.md) to register your first ability and expose it via MCP, or jump straight to the [Basic Examples](docs/getting-started/basic-examples.md) for complete tool, resource, and prompt samples.
+- [Local deployment, security and host configurations](docs/guides/local-harnesses.md)
+- [Ollama local / Ollama Cloud / AWS Bedrock architecture](docs/guides/model-providers.md)
+- [Abilities, exposure opt-in and permission model](docs/guides/creating-abilities.md)
+- [CLI and HTTP proxy](docs/guides/cli-usage.md)
+- [Architecture](docs/architecture/overview.md)
 
-WordPress abilities are private by default. Set `meta.public` (or `meta.mcp.public`) to `true` to expose one, then reach it through the [default server's](docs/guides/default-server.md) three meta-tools (`mcp-adapter/discover-abilities`, `mcp-adapter/get-ability-info`, `mcp-adapter/execute-ability`) — see [Creating Abilities](docs/guides/creating-abilities.md) for the full opt-in model.
+MCP tools are exposed only when explicitly marked `meta.mcp.public` (or `meta.public`). **Public** here means discoverable through MCP by an authorized caller; it does not remove WordPress authorization. Tools execute with the caller's WordPress capabilities, including any write capabilities granted to that user.
 
-## Connecting MCP Clients
+## Validation
 
-Connect via WP-CLI over STDIO, or point an HTTP client at `/wp-json/mcp/mcp-adapter-default-server`. Configuration examples for Claude Desktop and other MCP clients — both direct STDIO and HTTP-via-proxy — are in the [CLI Usage Guide](docs/guides/cli-usage.md).
+```bash
+npm run wp-env:test start
+npm run test:php
+npm run lint:php
+npm run lint:php:stan
+```
 
-## Migration
+CI checks PHP versions, WordPress compatibility, code style and static analysis; see [testing](docs/guides/testing.md). Use a nonproduction WordPress instance to test write-capable tools.
 
-- [Migration Guide: v0.7.0](docs/migration/v0.7.0.md)
-- [Migration Guide: v0.5.0](docs/migration/v0.5.0.md)
-- [Migration Guide: v0.3.0](docs/migration/v0.3.0.md)
+## Security / limitations
 
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, coding standards, and the contribution workflow, and the [Testing Guide](docs/guides/testing.md) for running the test suite.
-
-## Attribution
-
-Model Context Protocol, MCP, and the [MCP logo](https://commons.wikimedia.org/wiki/File:Model_Context_Protocol_logo.svg) are [trademarks of LF Projects, LLC](https://lfprojects.org/policies/trademark-policy/), and are used here solely for informational purposes. 
-## License
-[GPL-2.0-or-later](https://spdx.org/licenses/GPL-2.0-or-later.html)
+- Prefer STDIO for single-machine clients and **dedicated least-privilege WordPress users**.
+- HTTP clients need WordPress authentication (for example, Application Passwords over TLS). Incoming `Origin` headers are checked against the WordPress REST origin or an explicit allowlist; requests without `Origin` remain supported for nonbrowser clients.
+- Do not publish the development site or embed credentials in tracked client configuration.
+- HTTP SSE/GET streaming, OAuth discovery and blanket compatibility with all MCP harnesses are **not claimed**.
+- Report security issues per [SECURITY.md](SECURITY.md). Upstream project: [WordPress/mcp-adapter](https://github.com/WordPress/mcp-adapter).

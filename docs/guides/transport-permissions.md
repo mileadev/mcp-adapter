@@ -1,6 +1,6 @@
 # Transport Permission Callbacks
 
-Transport permission callbacks provide custom authentication for your MCP servers. By default, servers use `is_user_logged_in()`, but you can implement custom authentication logic.
+Transport permission callbacks provide custom authentication for your MCP servers. By default, HTTP access requires the WordPress `read` capability via `current_user_can('read')`. A custom permission callback can enforce a different authentication/authorization policy. The incoming HTTP `Origin` must first pass same-origin validation or an explicit allowlist.
 
 ## Basic Usage
 
@@ -20,7 +20,7 @@ $adapter->create_server(
     ['my-plugin/tool'], // tools
     [], // resources
     [], // prompts
-    // No permission callback = uses is_user_logged_in()
+    // No permission callback = requires current_user_can('read')
 );
 ```
 
@@ -60,7 +60,7 @@ function(): bool {
 
 ### Detailed Error Information
 ```php
-function(): WP_Error|bool {
+function() {
     if (!is_user_logged_in()) {
         return new WP_Error('not_logged_in', 'Please log in', ['status' => 401]);
     }
@@ -74,7 +74,7 @@ function(): WP_Error|bool {
 ```
 
 ### Error Handling
-- **Automatic Fallback**: Exceptions fall back to `is_user_logged_in()`
+- **Fail Closed**: Exceptions and `WP_Error` returns deny access; no fallback authentication is attempted.
 - **Error Logging**: Callback failures are logged
 - **Secure Default**: Always requires authentication
 
@@ -95,7 +95,7 @@ function(): bool {
 
 ### API Key Authentication
 ```php
-function(\WP_REST_Request $request): WP_Error|bool {
+function(\WP_REST_Request $request) {
     $api_key = $request->get_header('X-API-Key');
     
     if (empty($api_key)) {
@@ -227,7 +227,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | wp mcp-adapt
 - **Return types**: `bool` or `WP_Error`
 
 ### Error Handling
-- Exceptions automatically fall back to `is_user_logged_in()`
+- Exceptions and `WP_Error` responses deny access; callbacks do not fall back to another authentication policy.
 - All failures are logged with context
 - Secure default behavior
 
