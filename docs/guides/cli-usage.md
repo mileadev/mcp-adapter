@@ -31,7 +31,7 @@ wp mcp-adapter serve [--server=<server-id>] [--user=<id|login|email>]
 
 ```bash
 # Serve the default MCP server as admin user
-wp mcp-adapter serve --user=admin
+wp mcp-adapter serve --user=mcp-agent
 
 # Serve a specific server as user with ID 1
 wp mcp-adapter serve --server=my-mcp-server --user=1
@@ -118,7 +118,7 @@ Many MCP clients can launch subprocess servers. Point the client's config at the
         "serve",
         // Change the server ID and user as needed
         "--server=mcp-adapter-default-server",
-        "--user=admin"
+        "--user=mcp-agent"
       ]
     },
   }
@@ -280,3 +280,5 @@ wp mcp-adapter serve --server=prod-server --user=api-user
 - Validate server IDs to prevent unauthorized access
 
 This CLI functionality provides a powerful interface for integrating WordPress MCP servers with development tools and automated workflows and MCP clients.
+
+> **Security:** All identities, passwords and URLs in these examples are placeholders. Never commit Application Passwords to MCP configuration; use a local secret store. STDIO `--user` is an identity selector, **not** authentication of the local agent. See [local harnesses](local-harnesses.md) for threat boundaries and tested/untested host patterns.
